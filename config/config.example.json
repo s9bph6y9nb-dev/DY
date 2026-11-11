@@ -1,0 +1,10 @@
+{
+  "task_name": "daily-cloud-task",
+  "message": "GitHub Actions 云端任务执行成功",
+  "timezone": "Asia/Shanghai",
+  "output_dir": "output",
+  "notify": {
+    "enabled": false,
+    "webhook_env": "DINGTALK_WEBHOOK"
+  }
+}

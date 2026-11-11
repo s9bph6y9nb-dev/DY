@@ -1,0 +1,2 @@
+# 占位文件：让 Git 保留空的 output/ 目录。
+# 运行时生成 result.json / report.md / history.jsonl，已在 .gitignore 中忽略。

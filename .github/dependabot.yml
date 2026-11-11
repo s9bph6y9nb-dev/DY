@@ -1,0 +1,17 @@
+# 让 Dependabot 每周检查 GitHub Actions 的大版本更新。
+# 原因：Node 20 已于 2026-09 从 Actions 移除，Action 大版本会持续退役，
+# 手工跟进很容易忘记；这一步能让仓库一直跑在受支持的版本上。
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:17"
+      timezone: "Asia/Shanghai"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"

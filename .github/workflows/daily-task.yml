@@ -1,0 +1,89 @@
+# 云端自动任务：GitHub Actions 工作流定义
+#
+# 三个触发条件的区别（新手最容易混）：
+#   workflow_dispatch  → 手动点 "Run workflow"
+#   schedule           → 定时（cron）
+#   push / pull_request→ 代码变动时（本项目未启用，避免无关运行）
+name: Daily Cloud Task
+
+on:
+  # 1) 手动触发：第一次验证一定走这条路，先确认程序本身没问题
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "自定义运行消息，可留空"
+        required: false
+        default: ""
+
+  # 2) 定时触发：每天北京时间 09:17
+  #    注意：cron 默认按 UTC 解释；timezone 字段（2026-03 起支持）才让它变成"北京时间"。
+  #    如果写成 17 9 * * * 而不带 timezone，实际是 UTC 09:17 = 北京时间 17:17。
+  schedule:
+    - cron: "17 9 * * *"
+      timezone: "Asia/Shanghai"
+
+# 最小权限：只读代码 + 上传 Artifact。需要把结果写回仓库时才改 contents: write。
+permissions:
+  contents: read
+
+# 同一时间只跑一个：上一次还没结束时不启动新的，也不取消旧的
+concurrency:
+  group: daily-cloud-task
+  cancel-in-progress: false
+
+jobs:
+  daily-task:
+    name: Execute Python Task
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # 1) 把仓库代码下载到 Runner 的工作目录
+      #    版本说明：2026-11 各 Action 最新大版本为 checkout@v7 / setup-python@v7 /
+      #    upload-artifact@v7；Node 20 已于 2026-09 从 Actions 移除，不要再退回 v4/v5。
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # 2) 指定 Python 版本（不指定的话用的是镜像自带的默认版本，不可控）
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # 3) 安装依赖。本项目是纯标准库，这一步只是把流程补完整
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      # 4) 跑测试：代码有问题就别进入正式任务，节省额度和排障时间
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+      # 5) 打印触发上下文，方便理解"这次是谁触发的、按哪个时间跑的"
+      - name: Show trigger context
+        run: |
+          echo "事件类型: ${{ github.event_name }}"
+          echo "默认分支: ${{ github.ref_name }}"
+          echo "Run 编号: ${{ github.run_number }} (run_id=${{ github.run_id }})"
+          echo "Runner 时区: $(date +%Z), 本地时间: $(date +%FT%T%z)"
+          echo "UTC 时间: $(date -u +%FT%TZ)"
+
+      # 6) 执行任务本体
+      - name: Run Python Task
+        env:
+          TASK_TIMEZONE: "Asia/Shanghai"
+          TASK_MESSAGE: ${{ inputs.message }}
+          # 想开启群通知时改成 "true"，并在仓库 Secrets 里配置 DINGTALK_WEBHOOK
+          TASK_NOTIFY_ENABLED: "false"
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+        run: python -m app.main
+
+      # 7) 保存运行结果。Runner 结束后本地文件全部销毁，必须显式上传
+      #    if: always() 让"任务失败"时也能拿到诊断文件
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: daily-result-${{ github.run_id }}
+          path: output/
+          if-no-files-found: warn
+          retention-days: 7
